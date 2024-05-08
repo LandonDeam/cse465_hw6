@@ -1,0 +1,7 @@
+
+N = 100000 ;
+
+FOR N s = "*" ; s += s ; result = 1 ; result += 2 ; result *= 2 ; result -= 2 ; ENDFOR
+
+PRINT result ;
+PRINT s ;
