@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <regex>
+#include <unordered_map>
 
 std::string slurp(std::ifstream& in);
 
@@ -178,6 +179,11 @@ class Token {
         v[x] = v[y];
         v[y] = temp;
     }
+};
+
+class Reference {
+ private:
+    static std::unordered_map<std::string, Reference> mem();
 };
 
 int main(int argc, char** argv) {
