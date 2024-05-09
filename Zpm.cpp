@@ -59,12 +59,12 @@ class Token {
         static const std::regex compare("[<>=!]=");
         static const std::regex end_statement(";");
 
-        stealTokens(&tokens, getTokens(str, integer, &intString));
-        stealTokens(&tokens, getTokens(str, variable, &varString));
-        stealTokens(&tokens, getTokens(str, assign, &assignString));
-        stealTokens(&tokens, getTokens(str, compare, &cmpString));
-        stealTokens(&tokens, getTokens(str, end_statement, &endString));
-        stealTokens(&tokens, getTokens(str, string_reg, &stringString));
+        addVec(&tokens, getTokens(str, integer, &intString));
+        addVec(&tokens, getTokens(str, variable, &varString));
+        addVec(&tokens, getTokens(str, assign, &assignString));
+        addVec(&tokens, getTokens(str, compare, &cmpString));
+        addVec(&tokens, getTokens(str, end_statement, &endString));
+        addVec(&tokens, getTokens(str, string_reg, &stringString));
 
         for (Token token : tokens) {
             if (token.isInVector(tokens)) {
@@ -95,13 +95,6 @@ class Token {
                 }
         }
         return false;
-    }
-    static void stealTokens(std::vector<Token>* dest, std::vector<Token> src) {
-        dest->insert(
-            dest->end(),
-            std::make_move_iterator(src.begin()),
-            std::make_move_iterator(src.end()));
-        return;
     }
 
     static std::vector<Token> getTokens(
@@ -225,6 +218,14 @@ class Memory {
         }
     }
 
+    static Memory readMem(std::string location) {
+        return mem[location];
+    }
+
+    static int readInt(std::string location) {
+        return *reinterpret_cast<int*>(mem[location].data);
+    }
+
     static std::string toString(std::string key) {
         if (mem[key].type.compare("STR") == 0) {
             return *reinterpret_cast<std::string*>(mem[key].data);
@@ -241,8 +242,6 @@ class Memory {
         this->type = t;
         this->data = d;
     }
-
- private:
     static std::unordered_map<std::string, Memory> mem;
 };
 
@@ -251,6 +250,7 @@ class Statement {
     std::vector<Token> tokens;
 
     static std::vector<Statement> parse(std::vector<Token> tokens) {
+        std::vector<Statement> out = std::vector<Statement>();
         for (int i = 0; i < tokens.size(); i++) {
             if (tokens.at(i).TokenType.compare("KEY") == 0 &&
                 tokens.at(i).TokenValue.compare("FOR")) {
@@ -270,10 +270,15 @@ class Statement {
                         }
                     }
                 }
-                std::vector<Statement> temp =
-                    parse(std::vector<Token>(tokens.begin()+i+2,
-                                             tokens.begin()+posEndFor));
-                
+                for (int i = 0;
+                     i < (tokens.at(i+1).TokenType.compare("VAR") == 0) ?
+                         Memory::readInt(tokens.at(i+1).TokenValue) :
+                         std::stoi(tokens.at(i+1).TokenValue);
+                     i++) {
+                    addVec(&out,
+                        parse(std::vector<Token>(tokens.begin()+i+2,
+                                                tokens.begin()+posEndFor)));
+                }
             }
         }
     }
@@ -288,6 +293,15 @@ class Statement {
         }
     }
 };
+
+template<typename T>
+static void addVec(std::vector<T>* dest, std::vector<T> src) {
+    dest->insert(
+        dest->end(),
+        std::make_move_iterator(src.begin()),
+        std::make_move_iterator(src.end()));
+    return;
+}
 
 int main(int argc, char** argv) {
     if (argc < 2) {
