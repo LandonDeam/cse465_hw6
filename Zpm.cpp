@@ -14,6 +14,8 @@ class Token {
     std::string TokenValue;
     int TokenPos;
 
+    Token() {}
+
     Token(std::string Type, std::string Value, int Position) {
         this->TokenType = Type;
         this->TokenValue = Value;
@@ -30,8 +32,20 @@ class Token {
         return !(*this == other);
     }
 
-    void updateTokenType(std::string key) {
-        this->TokenType = key;
+    bool operator> (Token other) {
+        return this->TokenPos > other.TokenPos;
+    }
+
+    bool operator< (Token other) {
+        return this->TokenPos < other.TokenPos;
+    }
+
+    bool operator>= (Token other) {
+        return this->TokenPos >= other.TokenPos;
+    }
+
+    bool operator<= (Token other) {
+        return this->TokenPos <= other.TokenPos;
     }
 
     static std::vector<Token> LexicalAnalysis(std::string str) {
@@ -44,12 +58,12 @@ class Token {
         static const std::regex compare("[<>=!]=");
         static const std::regex end_statement(";");
 
-        stealTokens(&tokens, getTokens(str, integer, "INT", &intString));
-        stealTokens(&tokens, getTokens(str, variable, "VAR", &varString));
-        stealTokens(&tokens, getTokens(str, assign, "ASSIGN", &assignString));
-        stealTokens(&tokens, getTokens(str, compare, "CMP", &cmpString));
-        stealTokens(&tokens, getTokens(str, end_statement, "END", &endString));
-        stealTokens(&tokens, getTokens(str, string_reg, "STR", &stringString));
+        stealTokens(&tokens, getTokens(str, integer, &intString));
+        stealTokens(&tokens, getTokens(str, variable, &varString));
+        stealTokens(&tokens, getTokens(str, assign, &assignString));
+        stealTokens(&tokens, getTokens(str, compare, &cmpString));
+        stealTokens(&tokens, getTokens(str, end_statement, &endString));
+        stealTokens(&tokens, getTokens(str, string_reg, &stringString));
 
         for (Token token : tokens) {
             if (isInToken(token, tokens)) {
@@ -63,6 +77,8 @@ class Token {
                 tokens.erase(it);
             }
         }
+
+        quicksort(tokens, 0, tokens.size()-1);
 
         return tokens;
     }
@@ -90,7 +106,6 @@ class Token {
     static std::vector<Token> getTokens(
             std::string str,
             std::regex ptrn,
-            std::string Type,
             Token (*func)(std::smatch)) {
         std::vector<Token> tokens = std::vector<Token>();
         std::smatch str_result;
@@ -128,6 +143,40 @@ class Token {
     }
     static Token endString(std::smatch match) {
         return Token("END", ";", match.position());
+    }
+
+    static void quicksort(std::vector<Token> &vec, int L, int R) {
+        int i, j, mid;
+        Token piv;
+        i = L;
+        j = R;
+        mid = L + (R - L) / 2;
+        piv = vec[mid];
+
+        while (i<R || j>L) {
+            while (vec[i] < piv)
+                i++;
+            while (vec[j] > piv)
+                j--;
+
+            if (i <= j) {
+                swap(vec, i, j);
+                i++;
+                j--;
+            } else {
+                if (i < R)
+                    quicksort(vec, i, R);
+                if (j > L)
+                    quicksort(vec, L, j);
+                return;
+            }
+        }
+    }
+
+    static void swap(std::vector<Token>& v, int x, int y) {
+        Token temp = v[x];
+        v[x] = v[y];
+        v[y] = temp;
     }
 };
 
