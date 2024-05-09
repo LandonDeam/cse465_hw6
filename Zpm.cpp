@@ -30,6 +30,10 @@ class Token {
         return !(*this == other);
     }
 
+    void updateTokenType(std::string key) {
+        this->TokenType = key;
+    }
+
     static std::vector<Token> LexicalAnalysis(std::string str) {
         std::vector<Token> tokens = std::vector<Token>();
         std::vector<Token> remove = std::vector<Token>();
@@ -39,21 +43,16 @@ class Token {
         static const std::regex assign("(?:[^<>!])([+\\-*/]?=)");
         static const std::regex compare("[<>=!]=");
         static const std::regex end_statement(";");
-        static const std::regex key_word(
-            "(?:[^a-zA-Z_0-9]|)(PRINT|FOR|ENDFOR)(?:[^a-zA-Z_0-9]|)");
 
-        stealTokens(&tokens, getTokens(str, string_reg, "STR", &stringString));
         stealTokens(&tokens, getTokens(str, integer, "INT", &intString));
         stealTokens(&tokens, getTokens(str, variable, "VAR", &varString));
         stealTokens(&tokens, getTokens(str, assign, "ASSIGN", &assignString));
         stealTokens(&tokens, getTokens(str, compare, "CMP", &cmpString));
         stealTokens(&tokens, getTokens(str, end_statement, "END", &endString));
+        stealTokens(&tokens, getTokens(str, string_reg, "STR", &stringString));
 
         for (Token token : tokens) {
-            if (token.TokenType.compare("VAR") == 0 &&
-                std::regex_search(token.TokenValue, key_word)) {
-                    token.TokenType = "KEY";
-            } else if (isInToken(token, tokens)) {
+            if (isInToken(token, tokens)) {
                 remove.push_back(token);
             }
         }
@@ -72,8 +71,8 @@ class Token {
     static bool isInToken(Token token, std::vector<Token> vec) {
         for (Token token2 : vec) {
             if (token.TokenPos >= token2.TokenPos &&
-                token.TokenPos+token.TokenValue.size()-1
-                    < token2.TokenPos+token2.TokenValue.size() &&
+                token.TokenPos+token.TokenValue.size()
+                    <= token2.TokenPos+token2.TokenValue.size() &&
                 token != token2) {
                     return true;
                 }
@@ -92,36 +91,43 @@ class Token {
             std::string str,
             std::regex ptrn,
             std::string Type,
-            std::string (*func)(std::smatch)) {
+            Token (*func)(std::smatch)) {
         std::vector<Token> tokens = std::vector<Token>();
         std::smatch str_result;
 
         for (std::sregex_iterator i(str.begin(), str.end(), ptrn);
                 i != std::sregex_iterator();
                 i++) {
-            tokens.push_back(Token(Type, func(*i), i->position()));
+            tokens.push_back(func(*i));
         }
 
         return tokens;
     }
+    static bool isKeyWord(std::string s) {
+        return s.compare("PRINT") == 0 ||
+               s.compare("FOR") == 0 ||
+               s.compare("ENDFOR") == 0;
+    }
 
-    static std::string stringString(std::smatch match) {
-        return match.str(1);
+    static Token stringString(std::smatch match) {
+        return Token("STR", match.str(1), match.position(1));
     }
-    static std::string intString(std::smatch match) {
-        return match.str();
+    static Token intString(std::smatch match) {
+        return Token("INT", match.str(), match.position());
     }
-    static std::string varString(std::smatch match) {
-        return match.str();
+    static Token varString(std::smatch match) {
+        return Token(isKeyWord(match.str()) ? "KEY" : "VAR",
+                     match.str(),
+                     match.position());
     }
-    static std::string assignString(std::smatch match) {
-        return match.str(1);
+    static Token assignString(std::smatch match) {
+        return Token("ASSIGN", match.str(1), match.position(1));
     }
-    static std::string cmpString(std::smatch match) {
-        return match.str();
+    static Token cmpString(std::smatch match) {
+        return Token("CMP", match.str(), match.position());
     }
-    static std::string endString(std::smatch match) {
-        return ";";
+    static Token endString(std::smatch match) {
+        return Token("END", ";", match.position());
     }
 };
 
