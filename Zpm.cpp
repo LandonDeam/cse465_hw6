@@ -181,9 +181,112 @@ class Token {
     }
 };
 
-class Reference {
+class Memory {
+ public:
+    std::string type;
+    void* data;
+
+    static void assignMem(std::string location,
+                          std::string type,
+                          Memory data) {
+        if (type.compare("=") == 0) {
+            mem[location] = data;
+        }
+        if (data.type.compare("INT") == 0 &&
+            mem[location].type.compare("INT") == 0) {
+            if (type.compare("+=") == 0) {
+                *reinterpret_cast<int*>(mem[location].data)
+                    += *reinterpret_cast<int*>(data.data);
+            } else if (type.compare("-=") == 0) {
+                *reinterpret_cast<int*>(mem[location].data)
+                    -= *reinterpret_cast<int*>(data.data);
+            } else if (type.compare("*=") == 0) {
+                *reinterpret_cast<int*>(mem[location].data)
+                    *= *reinterpret_cast<int*>(data.data);
+            } else if (type.compare("/=") == 0) {
+                if (*reinterpret_cast<int*>(data.data) == 0) {
+                    // TODO(LandonDeam) throw runtime error;
+                }
+                *reinterpret_cast<int*>(mem[location].data)
+                    /= *reinterpret_cast<int*>(data.data);
+            } else {
+                // TODO(LandonDeam) throw runtime error;
+            }
+        } else if (data.type.compare("STR") == 0 &&
+            mem[location].type.compare("STR") == 0) {
+            if (type.compare("+=") == 0) {
+                *reinterpret_cast<std::string*>(mem[location].data)
+                    += *reinterpret_cast<std::string*>(data.data);
+            } else {
+                // TODO(Landon Deam) throw runtime error;
+            }
+        } else {
+            // TODO(LandonDeam) throw runtime error;
+        }
+    }
+
+    static std::string toString(std::string key) {
+        if (mem[key].type.compare("STR") == 0) {
+            return *reinterpret_cast<std::string*>(mem[key].data);
+        } else if (mem[key].type.compare("INT") == 0) {
+            return ""+*reinterpret_cast<int*>(mem[key].data);
+        }
+    }
+
+    static void print(std::string key) {
+        std::cout << toString(key) << std::endl;
+    }
+
+    Memory(std::string t, void* d) {
+        this->type = t;
+        this->data = d;
+    }
+
  private:
-    static std::unordered_map<std::string, Reference> mem();
+    static std::unordered_map<std::string, Memory> mem;
+};
+
+class Statement {
+ public:
+    std::vector<Token> tokens;
+
+    static std::vector<Statement> parse(std::vector<Token> tokens) {
+        for (int i = 0; i < tokens.size(); i++) {
+            if (tokens.at(i).TokenType.compare("KEY") == 0 &&
+                tokens.at(i).TokenValue.compare("FOR")) {
+                int posEndFor = -1;
+                int fors = 1;
+                for (int j = i+2; j < tokens.size(); j++) {
+                    if (tokens.at(j).TokenType.compare("KEY") == 0) {
+                        if (tokens.at(j).TokenValue.compare("FOR")) {
+                            fors++;
+                        } else if (tokens.at(j).TokenValue.compare("ENDFOR")) {
+                            if (fors <= 1) {
+                                posEndFor = j;
+                                return;
+                            } else {
+                                fors--;
+                            }
+                        }
+                    }
+                }
+                std::vector<Statement> temp =
+                    parse(std::vector<Token>(tokens.begin()+i+2,
+                                             tokens.begin()+posEndFor));
+                
+            }
+        }
+    }
+
+    void execute() {
+        for (int i = 0; i < tokens.size(); i++) {
+            if (tokens.at(i).TokenType.compare("KEY") == 0) {
+                if (tokens.at(i).TokenValue.compare("PRINT") == 0) {
+                    Memory::print(tokens.at(i+1).TokenValue);
+                }
+            }
+        }
+    }
 };
 
 int main(int argc, char** argv) {
