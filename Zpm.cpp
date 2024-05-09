@@ -66,7 +66,7 @@ class Token {
         stealTokens(&tokens, getTokens(str, string_reg, &stringString));
 
         for (Token token : tokens) {
-            if (isInToken(token, tokens)) {
+            if (token.isInVector(tokens)) {
                 remove.push_back(token);
             }
         }
@@ -84,12 +84,12 @@ class Token {
     }
 
  private:
-    static bool isInToken(Token token, std::vector<Token> vec) {
-        for (Token token2 : vec) {
-            if (token.TokenPos >= token2.TokenPos &&
-                token.TokenPos+token.TokenValue.size()
-                    <= token2.TokenPos+token2.TokenValue.size() &&
-                token != token2) {
+    bool isInVector(std::vector<Token> vec) {
+        for (Token token : vec) {
+            if (this->TokenPos >= token.TokenPos &&
+                this->TokenPos+this->TokenValue.size()
+                    <= token.TokenPos+token.TokenValue.size() &&
+                *this != token) {
                     return true;
                 }
         }
