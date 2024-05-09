@@ -7,6 +7,8 @@
 #include <string>
 #include <regex>
 #include <unordered_map>
+#include <memory>
+#include <variant>
 
 std::string slurp(std::ifstream& in);
 template<typename T>
@@ -55,12 +57,6 @@ class Token {
     static std::vector<Token> LexicalAnalysis(std::string str) {
         std::vector<Token> tokens = std::vector<Token>();
         std::vector<Token> remove = std::vector<Token>();
-        std::regex string_reg("\"(.*?)\"");
-        std::regex integer("-?[0-9]+");
-        std::regex variable("[a-zA-Z_][a-zA-Z_0-9]*(?=\\s)");
-        std::regex assign("(?:[^<>!])([+\\-*/]?=)");
-        std::regex compare("[<>=!]=");
-        std::regex end_statement(";");
 
         addVec(&tokens, getTokens(str, integer, &intString));
         addVec(&tokens, getTokens(str, variable, &varString));
@@ -88,6 +84,13 @@ class Token {
     }
 
  private:
+    static std::regex string_reg;
+    static std::regex integer;
+    static std::regex variable;
+    static std::regex assign;
+    static std::regex compare;
+    static std::regex end_statement;
+
     bool isInVector(std::vector<Token> vec) {
         for (Token token : vec) {
             if (this->TokenPos >= token.TokenPos &&
@@ -116,9 +119,9 @@ class Token {
         return tokens;
     }
     static bool isKeyWord(std::string s) {
-        return s.compare("PRINT") == 0 ||
-               s.compare("FOR") == 0 ||
-               s.compare("ENDFOR") == 0;
+        return s == "PRINT" ||
+               s == "FOR" ||
+               s == "ENDFOR";
     }
 
     static Token stringString(std::smatch match) {
@@ -180,46 +183,62 @@ class Token {
 class Memory {
  public:
     std::string type;
-    void* data;
+    std::variant<int, std::string> data;
 
-    static void assignMem(std::string location,
-                          std::string type,
-                          Memory data) {
-        if (type.compare("=") == 0) {
+    static void assignMem(std::string location, std::string type, Memory data) {
+        if (type == "=") {
             mem[location] = data;
-        }
-        if (data.type.compare("INT") == 0 &&
-            mem[location].type.compare("INT") == 0) {
-            if (type.compare("+=") == 0) {
-                *reinterpret_cast<int*>(mem[location].data)
-                    += *reinterpret_cast<int*>(data.data);
-            } else if (type.compare("-=") == 0) {
-                *reinterpret_cast<int*>(mem[location].data)
-                    -= *reinterpret_cast<int*>(data.data);
-            } else if (type.compare("*=") == 0) {
-                *reinterpret_cast<int*>(mem[location].data)
-                    *= *reinterpret_cast<int*>(data.data);
-            } else if (type.compare("/=") == 0) {
-                if (*reinterpret_cast<int*>(data.data) == 0) {
-                    // TODO(LandonDeam) throw runtime error;
-                }
-                *reinterpret_cast<int*>(mem[location].data)
-                    /= *reinterpret_cast<int*>(data.data);
-            } else {
-                // TODO(LandonDeam) throw runtime error;
+        } else if (type == "+=" ||
+                type == "-=" ||
+                type == "*=" ||
+                type == "/=") {
+            if (mem[location].type != data.type) {
+                // Handle error: mismatched types
+                return;
             }
-        } else if (data.type.compare("STR") == 0 &&
-            mem[location].type.compare("STR") == 0) {
-            if (type.compare("+=") == 0) {
-                *reinterpret_cast<std::string*>(mem[location].data)
-                    += *reinterpret_cast<std::string*>(data.data);
+            // Perform operation based on the type
+            if (mem[location].type == "INT") {
+                // Add, subtract, multiply, or divide integers
+                if (std::holds_alternative<int>(mem[location].data) &&
+                    std::holds_alternative<int>(data.data)) {
+                    int arg1 = std::get<int>(mem[location].data);
+                    int arg2 = std::get<int>(data.data);
+                    if (type == "+=") {
+                        arg1 += arg2;
+                    } else if (type == "-=") {
+                        arg1 -= arg2;
+                    } else if (type == "*=") {
+                        arg1 *= arg2;
+                    } else if (type == "/=") {
+                        if (arg2 == 0) {
+                            // Handle division by zero error
+                        } else {
+                            arg1 /= arg2;
+                        }
+                    }
+                    mem[location].data = arg1;
+                } else {
+                    // Handle error: invalid data type
+                }
+            } else if (mem[location].type == "STR" && type == "+=") {
+                // Concatenate strings
+                if (std::holds_alternative<std::string>(mem[location].data) &&
+                    std::holds_alternative<std::string>(data.data)) {
+                    std::string& arg1 =
+                        std::get<std::string>(mem[location].data);
+                    const std::string& arg2 = std::get<std::string>(data.data);
+                    arg1 += arg2;
+                } else {
+                    // Handle error: invalid data type
+                }
             } else {
-                // TODO(Landon Deam) throw runtime error;
+                // Handle error: unsupported operation
             }
         } else {
-            // TODO(LandonDeam) throw runtime error;
+            // Handle error: invalid operation
         }
     }
+
 
     static Memory readMem(std::string location) {
         if (isNotInMemory(location)) {
@@ -229,23 +248,32 @@ class Memory {
     }
 
     static int readInt(std::string location) {
-        return *reinterpret_cast<int*>(mem[location].data);
+        if (isNotInMemory(location)) {
+            // TODO(LandonDeam) throw runtime error;
+            return 0;
+        }
+        if (mem[location].type == "INT") {
+            return std::get<int>(mem[location].data);
+        } else {
+            return 0;
+        }
     }
 
     static std::string toString(std::string key) {
         if (isNotInMemory(key)) {
             // TODO(LandonDeam) throw runtime error;
         }
-        if (mem[key].type.compare("STR") == 0) {
-            return *reinterpret_cast<std::string*>(mem[key].data);
-        } else if (mem[key].type.compare("INT") == 0) {
-            return ""+*reinterpret_cast<int*>(mem[key].data);
+        if (mem[key].type == "STR") {
+            return std::get<std::string>(mem[key].data);
+        } else if (mem[key].type == "INT") {
+            return std::to_string(
+                std::get<int>(mem[key].data));
         }
         return "";
     }
 
     static void print(std::string key) {
-        std::cout << toString(key) << std::endl;
+        std::cout << key << "=" << toString(key) << std::endl;
     }
 
     static void initMem() {
@@ -256,10 +284,9 @@ class Memory {
         return mem.find(key) == mem.end();
     }
 
-    Memory(std::string t, void* d) {
-        this->type = t;
-        this->data = d;
-    }
+    Memory(std::string t,
+           std::variant<int, std::string> d)
+           : type(t), data(d) {}
 
     Memory() = default;
 
@@ -274,15 +301,16 @@ class Statement {
     static std::vector<Statement> parse(std::vector<Token> tokens) {
         std::vector<Statement> out = std::vector<Statement>();
         for (int i = 0; i < tokens.size(); i++) {
-            if (tokens.at(i).TokenType.compare("KEY") == 0 &&
-                tokens.at(i).TokenValue.compare("FOR")) {
+            if (tokens.at(i).TokenType == "KEY" &&
+                tokens.at(i).TokenValue == "FOR") {
                 int posEndFor = -1;
                 int fors = 1;
                 for (int j = i+2; j < tokens.size(); j++) {
-                    if (tokens.at(j).TokenType.compare("KEY") == 0) {
-                        if (tokens.at(j).TokenValue.compare("FOR")) {
+                    if (tokens.at(j).TokenType == "KEY") {
+                        if (tokens.at(j).TokenValue == "FOR") {
                             fors++;
-                        } else if (tokens.at(j).TokenValue.compare("ENDFOR")) {
+                        } else if (
+                            tokens.at(j).TokenValue == "ENDFOR") {
                             if (fors <= 1) {
                                 posEndFor = j;
                                 break;
@@ -292,27 +320,23 @@ class Statement {
                         }
                     }
                 }
-                for (int i = 0;
-                     i < (tokens.at(i+1).TokenType.compare("VAR") == 0) ?
-                         Memory::readInt(tokens.at(i+1).TokenValue) :
-                         std::stoi(tokens.at(i+1).TokenValue);
-                     i++) {
-                    addVec(&out,
-                        parse(std::vector<Token>(tokens.begin()+i+2,
-                                                tokens.begin()+posEndFor)));
-                }
+                out.push_back(Statement(std::vector<Token>(
+                    tokens.begin()+i,
+                    tokens.begin()+posEndFor+1)));
                 i = posEndFor;
-            } else if (tokens.at(i).TokenType.compare("VAR") == 0) {
+            } else if (tokens.at(i).TokenType == "VAR") {
+                out.push_back(Statement(
+                    std::vector<Token>(
+                        tokens.begin()+i,
+                        tokens.begin()+i+4)));
+                i+=3;
+            } else if (tokens.at(i).TokenType == "KEY" &&
+                       tokens.at(i).TokenValue == "PRINT") {
                 out.push_back(Statement(
                     std::vector<Token>(
                         tokens.begin()+i,
                         tokens.begin()+i+3)));
-            } else if (tokens.at(i).TokenType.compare("KEY") == 0 &&
-                       tokens.at(i).TokenValue.compare("PRINT") == 0) {
-                out.push_back(Statement(
-                    std::vector<Token>(
-                        tokens.begin()+i,
-                        tokens.begin()+i+2)));
+                i+=2;
             }
         }
         return out;
@@ -323,31 +347,53 @@ class Statement {
     }
 
     void execute() {
-        for (int i = 0; i < tokens.size(); i++) {
-            if (tokens.at(i).TokenType.compare("KEY") == 0) {
-                if (tokens.at(i).TokenValue.compare("PRINT") == 0) {
-                    Memory::print(tokens.at(i+1).TokenValue);
-                    i++;
-                }
-            } else if (tokens.at(i).TokenType.compare("VAR") == 0) {
-                if (tokens.at(i+2).TokenType.compare("VAR") == 0) {
-                } else {
-                    void* value;
-                    if (tokens.at(i+2).TokenType.compare("STR") == 0) {
-                        value = &tokens.at(i+2).TokenValue;
-                    } else if (tokens.at(i+2).TokenType.compare("INT") == 0) {
-                        int v = std::stoi(tokens.at(i+2).TokenValue);
-                        value = &v;
+        if (tokens.at(0).TokenType == "KEY") {
+            if (tokens.at(0).TokenValue == "PRINT") {
+                Memory::print(tokens.at(1).TokenValue);
+            } else if (tokens.at(0).TokenValue == "FOR") {
+                for (int j = 0;
+                    j < ((tokens.at(1).TokenType == "VAR") ?
+                        Memory::readInt(tokens.at(1).TokenValue) :
+                        std::stoi(tokens.at(1).TokenValue));
+                    j++) {
+                    std::vector<Statement> statements =
+                    parse(std::vector<Token>(tokens.begin()+2,
+                                             tokens.end()));
+                    for (int k = 0; k < statements.size(); k++) {
+                        statements.at(k).execute();
                     }
-                    Memory::assignMem(
-                        tokens.at(i).TokenValue,
-                        tokens.at(i+1).TokenValue,
-                        Memory(tokens.at(i+2).TokenType, value));
                 }
+            }
+        } else if (tokens.at(0).TokenType == "VAR") {
+            if (tokens.at(2).TokenType == "VAR") {
+                Memory::assignMem(
+                    tokens.at(0).TokenValue,
+                    tokens.at(1).TokenValue,
+                    Memory::readMem(tokens.at(2).TokenValue));
+            } else {
+                std::variant<int, std::string> value;
+                if (tokens.at(2).TokenType == "STR") {
+                    value = tokens.at(2).TokenValue;
+                } else if (tokens.at(2).TokenType == "INT") {
+                    value = std::stoi(tokens.at(2).TokenValue);
+                }
+                Memory::assignMem(
+                    tokens.at(0).TokenValue,
+                    tokens.at(1).TokenValue,
+                    Memory(tokens.at(2).TokenType, value));
             }
         }
     }
 };
+
+std::unordered_map<std::string, Memory> Memory::mem;
+
+std::regex Token::string_reg("\"(.*?)\"");
+std::regex Token::integer("-?[0-9]+");
+std::regex Token::variable("[a-zA-Z_][a-zA-Z_0-9]*(?=\\s)");
+std::regex Token::assign("(?:[^<>!])([+\\-*/]?=)");
+std::regex Token::compare("[<>=!]=");
+std::regex Token::end_statement(";");
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -371,8 +417,8 @@ int main(int argc, char** argv) {
     std::vector<Token> tokens = Token::LexicalAnalysis(str);
     Memory::initMem();
     std::vector<Statement> statements = Statement::parse(tokens);
-    for (Statement statement : statements) {
-        statement.execute();
+    for (int i = 0; i < statements.size(); i++) {
+        statements.at(i).execute();
     }
     file.close();
     return 0;
