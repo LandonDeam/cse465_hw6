@@ -1,3 +1,4 @@
+// => I’m competing for BONUS Points <=
 // Copyright Landon Deam 2024
 
 #include <iostream>
@@ -8,6 +9,8 @@
 #include <unordered_map>
 
 std::string slurp(std::ifstream& in);
+template<typename T>
+static void addVec(std::vector<T>* dest, std::vector<T> src);
 
 class Token {
  public:
@@ -52,12 +55,12 @@ class Token {
     static std::vector<Token> LexicalAnalysis(std::string str) {
         std::vector<Token> tokens = std::vector<Token>();
         std::vector<Token> remove = std::vector<Token>();
-        static const std::regex string_reg("\"(.*?)\"");
-        static const std::regex integer("-?[0-9]+");
-        static const std::regex variable("[a-zA-Z_][a-zA-Z_0-9]*(?=\\s)");
-        static const std::regex assign("(?:[^<>!])([+\\-*/]?=)");
-        static const std::regex compare("[<>=!]=");
-        static const std::regex end_statement(";");
+        std::regex string_reg("\"(.*?)\"");
+        std::regex integer("-?[0-9]+");
+        std::regex variable("[a-zA-Z_][a-zA-Z_0-9]*(?=\\s)");
+        std::regex assign("(?:[^<>!])([+\\-*/]?=)");
+        std::regex compare("[<>=!]=");
+        std::regex end_statement(";");
 
         addVec(&tokens, getTokens(str, integer, &intString));
         addVec(&tokens, getTokens(str, variable, &varString));
@@ -219,6 +222,9 @@ class Memory {
     }
 
     static Memory readMem(std::string location) {
+        if (isNotInMemory(location)) {
+            // TODO(LandonDeam) throw runtime error;
+        }
         return mem[location];
     }
 
@@ -227,21 +233,37 @@ class Memory {
     }
 
     static std::string toString(std::string key) {
+        if (isNotInMemory(key)) {
+            // TODO(LandonDeam) throw runtime error;
+        }
         if (mem[key].type.compare("STR") == 0) {
             return *reinterpret_cast<std::string*>(mem[key].data);
         } else if (mem[key].type.compare("INT") == 0) {
             return ""+*reinterpret_cast<int*>(mem[key].data);
         }
+        return "";
     }
 
     static void print(std::string key) {
         std::cout << toString(key) << std::endl;
     }
 
+    static void initMem() {
+        mem = std::unordered_map<std::string, Memory>();
+    }
+
+    static bool isNotInMemory(std::string key) {
+        return mem.find(key) == mem.end();
+    }
+
     Memory(std::string t, void* d) {
         this->type = t;
         this->data = d;
     }
+
+    Memory() = default;
+
+ private:
     static std::unordered_map<std::string, Memory> mem;
 };
 
@@ -263,7 +285,7 @@ class Statement {
                         } else if (tokens.at(j).TokenValue.compare("ENDFOR")) {
                             if (fors <= 1) {
                                 posEndFor = j;
-                                return;
+                                break;
                             } else {
                                 fors--;
                             }
@@ -279,8 +301,25 @@ class Statement {
                         parse(std::vector<Token>(tokens.begin()+i+2,
                                                 tokens.begin()+posEndFor)));
                 }
+                i = posEndFor;
+            } else if (tokens.at(i).TokenType.compare("VAR") == 0) {
+                out.push_back(Statement(
+                    std::vector<Token>(
+                        tokens.begin()+i,
+                        tokens.begin()+i+3)));
+            } else if (tokens.at(i).TokenType.compare("KEY") == 0 &&
+                       tokens.at(i).TokenValue.compare("PRINT") == 0) {
+                out.push_back(Statement(
+                    std::vector<Token>(
+                        tokens.begin()+i,
+                        tokens.begin()+i+2)));
             }
         }
+        return out;
+    }
+
+    explicit Statement(std::vector<Token> t) {
+        this->tokens = t;
     }
 
     void execute() {
@@ -288,20 +327,27 @@ class Statement {
             if (tokens.at(i).TokenType.compare("KEY") == 0) {
                 if (tokens.at(i).TokenValue.compare("PRINT") == 0) {
                     Memory::print(tokens.at(i+1).TokenValue);
+                    i++;
+                }
+            } else if (tokens.at(i).TokenType.compare("VAR") == 0) {
+                if (tokens.at(i+2).TokenType.compare("VAR") == 0) {
+                } else {
+                    void* value;
+                    if (tokens.at(i+2).TokenType.compare("STR") == 0) {
+                        value = &tokens.at(i+2).TokenValue;
+                    } else if (tokens.at(i+2).TokenType.compare("INT") == 0) {
+                        int v = std::stoi(tokens.at(i+2).TokenValue);
+                        value = &v;
+                    }
+                    Memory::assignMem(
+                        tokens.at(i).TokenValue,
+                        tokens.at(i+1).TokenValue,
+                        Memory(tokens.at(i+2).TokenType, value));
                 }
             }
         }
     }
 };
-
-template<typename T>
-static void addVec(std::vector<T>* dest, std::vector<T> src) {
-    dest->insert(
-        dest->end(),
-        std::make_move_iterator(src.begin()),
-        std::make_move_iterator(src.end()));
-    return;
-}
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -323,17 +369,10 @@ int main(int argc, char** argv) {
 
     std::string str = slurp(file);
     std::vector<Token> tokens = Token::LexicalAnalysis(str);
-    for (Token token : tokens) {
-        std::cout << "("
-                  << token.TokenType
-                  << ","
-                  << token.TokenValue
-                  << ","
-                  << token.TokenPos
-                  << "-"
-                  << token.TokenPos+token.TokenValue.size()-1
-                  << ")"
-                  << std::endl;
+    Memory::initMem();
+    std::vector<Statement> statements = Statement::parse(tokens);
+    for (Statement statement : statements) {
+        statement.execute();
     }
     file.close();
     return 0;
@@ -343,4 +382,13 @@ std::string slurp(std::ifstream& in) {
     std::ostringstream sstr;
     sstr << in.rdbuf();
     return sstr.str();
+}
+
+template<typename T>
+static void addVec(std::vector<T>* dest, std::vector<T> src) {
+    dest->insert(
+        dest->end(),
+        std::make_move_iterator(src.begin()),
+        std::make_move_iterator(src.end()));
+    return;
 }
