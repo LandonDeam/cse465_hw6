@@ -78,7 +78,7 @@ class Token {
             }
         }
 
-        quicksort(tokens, 0, tokens.size()-1);
+        quicksort(&tokens, 0, tokens.size()-1);
 
         return tokens;
     }
@@ -145,22 +145,22 @@ class Token {
         return Token("END", ";", match.position());
     }
 
-    static void quicksort(std::vector<Token> &vec, int L, int R) {
+    static void quicksort(std::vector<Token>* vec, int L, int R) {
         int i, j, mid;
         Token piv;
         i = L;
         j = R;
         mid = L + (R - L) / 2;
-        piv = vec[mid];
+        piv = (*vec)[mid];
 
         while (i<R || j>L) {
-            while (vec[i] < piv)
+            while ((*vec)[i] < piv)
                 i++;
-            while (vec[j] > piv)
+            while ((*vec)[j] > piv)
                 j--;
 
             if (i <= j) {
-                swap(vec, i, j);
+                swap((*vec), i, j);
                 i++;
                 j--;
             } else {
