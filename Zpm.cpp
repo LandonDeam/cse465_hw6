@@ -229,13 +229,13 @@ class Memory {
                     const std::string& arg2 = std::get<std::string>(data.data);
                     arg1 += arg2;
                 } else {
-                    // Handle error: invalid data type
+                    // TODO(LandonDeam) throw runtime error;
                 }
             } else {
-                // Handle error: unsupported operation
+                // TODO(LandonDeam) throw runtime error;
             }
         } else {
-            // Handle error: invalid operation
+            // TODO(LandonDeam) throw runtime error;
         }
     }
 
@@ -264,7 +264,7 @@ class Memory {
             // TODO(LandonDeam) throw runtime error;
         }
         if (mem[key].type == "STR") {
-            return std::get<std::string>(mem[key].data);
+            return "\""+std::get<std::string>(mem[key].data)+"\"";
         } else if (mem[key].type == "INT") {
             return std::to_string(
                 std::get<int>(mem[key].data));
@@ -322,7 +322,7 @@ class Statement {
                 }
                 out.push_back(Statement(std::vector<Token>(
                     tokens.begin()+i,
-                    tokens.begin()+posEndFor+1)));
+                    tokens.begin()+posEndFor)));
                 i = posEndFor;
             } else if (tokens.at(i).TokenType == "VAR") {
                 out.push_back(Statement(
@@ -390,7 +390,7 @@ std::unordered_map<std::string, Memory> Memory::mem;
 
 std::regex Token::string_reg("\"(.*?)\"");
 std::regex Token::integer("-?[0-9]+");
-std::regex Token::variable("[a-zA-Z_][a-zA-Z_0-9]*(?=\\s)");
+std::regex Token::variable("[a-zA-Z_][a-zA-Z_0-9]*(?=\\s|)(?!\")");
 std::regex Token::assign("(?:[^<>!])([+\\-*/]?=)");
 std::regex Token::compare("[<>=!]=");
 std::regex Token::end_statement(";");
