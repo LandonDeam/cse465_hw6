@@ -9,6 +9,8 @@
 #include <unordered_map>
 #include <memory>
 #include <variant>
+#include <thread>
+#include <future>
 
 std::string slurp(std::ifstream& in);
 template<typename T>
@@ -61,13 +63,49 @@ class Token {
     static std::vector<Token> LexicalAnalysis(std::string str) {
         std::vector<Token> tokens = std::vector<Token>();
         std::vector<Token> remove = std::vector<Token>();
+        std::vector<std::future<std::vector<Token>>> futures =
+            std::vector<std::future<std::vector<Token>>>();
 
-        addVec(&tokens, getTokens(str, integer, &intString));
-        addVec(&tokens, getTokens(str, variable, &varString));
-        addVec(&tokens, getTokens(str, assign, &assignString));
-        addVec(&tokens, getTokens(str, compare, &cmpString));
-        addVec(&tokens, getTokens(str, end_statement, &endString));
-        addVec(&tokens, getTokens(str, string_reg, &stringString));
+        futures.push_back(std::async(
+            std::launch::async,
+            &getTokens,
+            str,
+            integer,
+            &intString));
+        futures.push_back(std::async(
+            std::launch::async,
+            &getTokens,
+            str,
+            variable,
+            &varString));
+        futures.push_back(std::async(
+            std::launch::async,
+            &getTokens,
+            str,
+            assign,
+            &assignString));
+        futures.push_back(std::async(
+            std::launch::async,
+            &getTokens,
+            str,
+            compare,
+            &cmpString));
+        futures.push_back(std::async(
+            std::launch::async,
+            &getTokens,
+            str,
+            end_statement,
+            &endString));
+        futures.push_back(std::async(
+            std::launch::async,
+            &getTokens,
+            str,
+            string_reg,
+            &stringString));
+
+        for (int i = 0; i < futures.size(); i++) {
+            addVec(&tokens, futures.at(i).get());
+        }
 
         for (Token token : tokens) {
             if (token.isInVector(tokens)) {
