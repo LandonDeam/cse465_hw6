@@ -13,23 +13,27 @@
 std::string slurp(std::ifstream& in);
 template<typename T>
 static void addVec(std::vector<T>* dest, std::vector<T> src);
+static bool exited;
 
 class Token {
  public:
     std::string TokenType;
     std::string TokenValue;
     int TokenPos;
+    int TokenLine;
 
     Token() {}
 
-    Token(std::string Type, std::string Value, int Position) {
+    Token(std::string Type, std::string Value, int Position, int Line) {
         this->TokenType = Type;
         this->TokenValue = Value;
         this->TokenPos = Position;
+        this->TokenLine = Line;
     }
 
     bool operator== (Token other) {
         return this->TokenPos == other.TokenPos &&
+               this->TokenLine == other.TokenLine &&
                this->TokenType.compare(other.TokenType) == 0 &&
                this->TokenValue.compare(other.TokenValue) == 0;
     }
@@ -106,14 +110,14 @@ class Token {
     static std::vector<Token> getTokens(
             std::string str,
             std::regex ptrn,
-            Token (*func)(std::smatch)) {
+            Token (*func)(std::smatch, std::string)) {
         std::vector<Token> tokens = std::vector<Token>();
         std::smatch str_result;
 
         for (std::sregex_iterator i(str.begin(), str.end(), ptrn);
                 i != std::sregex_iterator();
                 i++) {
-            tokens.push_back(func(*i));
+            tokens.push_back(func(*i, str));
         }
 
         return tokens;
@@ -124,25 +128,55 @@ class Token {
                s == "ENDFOR";
     }
 
-    static Token stringString(std::smatch match) {
-        return Token("STR", match.str(1), match.position(1));
+    static Token stringString(std::smatch match, std::string str) {
+        return Token("STR",
+                     match.str(1),
+                     match.position(1),
+                     getLine(match.position(1), str));
     }
-    static Token intString(std::smatch match) {
-        return Token("INT", match.str(), match.position());
+    static Token intString(std::smatch match, std::string str) {
+        return Token("INT",
+                     match.str(),
+                     match.position(),
+                     getLine(match.position(), str));
     }
-    static Token varString(std::smatch match) {
+    static Token varString(std::smatch match, std::string str) {
         return Token(isKeyWord(match.str()) ? "KEY" : "VAR",
                      match.str(),
-                     match.position());
+                     match.position(),
+                     getLine(match.position(), str));
     }
-    static Token assignString(std::smatch match) {
-        return Token("ASSIGN", match.str(1), match.position(1));
+    static Token assignString(std::smatch match, std::string str) {
+        return Token("ASSIGN",
+                     match.str(1),
+                     match.position(1),
+                     getLine(match.position(1), str));
     }
-    static Token cmpString(std::smatch match) {
-        return Token("CMP", match.str(), match.position());
+    static Token cmpString(std::smatch match, std::string str) {
+        return Token("CMP",
+                     match.str(),
+                     match.position(),
+                     getLine(match.position(), str));
     }
-    static Token endString(std::smatch match) {
-        return Token("END", ";", match.position());
+    static Token endString(std::smatch match, std::string str) {
+        return Token("END",
+                     ";",
+                     match.position(),
+                     getLine(match.position(), str));
+    }
+
+    static int getLine(int pos, std::string str) {
+        if (str.size() <= pos) {
+            return -1;
+        }
+
+        int line = 1;
+        for (int i = 0; i < pos; i++) {
+            if (str.at(i) == '\n') {
+                line++;
+            }
+        }
+        return line;
     }
 
     static void quicksort(std::vector<Token>* vec, int L, int R) {
@@ -185,7 +219,11 @@ class Memory {
     std::string type;
     std::variant<int, std::string> data;
 
-    static void assignMem(std::string location, std::string type, Memory data) {
+    static void assignMem(
+        std::string location,
+        std::string type,
+        Memory data,
+        int line) {
         if (type == "=") {
             mem[location] = data;
         } else if (type == "+=" ||
@@ -193,12 +231,12 @@ class Memory {
                 type == "*=" ||
                 type == "/=") {
             if (mem[location].type != data.type) {
-                // Handle error: mismatched types
+                std::cout << "RUNTIME ERROR: line " << line << std::endl;
+                exited = true;
+                exit;
                 return;
             }
-            // Perform operation based on the type
             if (mem[location].type == "INT") {
-                // Add, subtract, multiply, or divide integers
                 if (std::holds_alternative<int>(mem[location].data) &&
                     std::holds_alternative<int>(data.data)) {
                     int arg1 = std::get<int>(mem[location].data);
@@ -211,17 +249,23 @@ class Memory {
                         arg1 *= arg2;
                     } else if (type == "/=") {
                         if (arg2 == 0) {
-                            // Handle division by zero error
+                            std::cout << "RUNTIME ERROR: line " << line
+                                      << std::endl;
+                            exited = true;
+                            exit;
+                            return;
                         } else {
                             arg1 /= arg2;
                         }
                     }
                     mem[location].data = arg1;
                 } else {
-                    // Handle error: invalid data type
+                    std::cout << "RUNTIME ERROR: line " << line << std::endl;
+                    exited = true;
+                    exit;
+                    return;
                 }
             } else if (mem[location].type == "STR" && type == "+=") {
-                // Concatenate strings
                 if (std::holds_alternative<std::string>(mem[location].data) &&
                     std::holds_alternative<std::string>(data.data)) {
                     std::string& arg1 =
@@ -229,39 +273,59 @@ class Memory {
                     const std::string& arg2 = std::get<std::string>(data.data);
                     arg1 += arg2;
                 } else {
-                    // TODO(LandonDeam) throw runtime error;
+                    std::cout << "RUNTIME ERROR: line " << line << std::endl;
+                    exited = true;
+                    exit;
+                    return;
                 }
             } else {
-                // TODO(LandonDeam) throw runtime error;
+                std::cout << "RUNTIME ERROR: line " << line << std::endl;
+                exited = true;
+                exit;
+                return;
             }
         } else {
-            // TODO(LandonDeam) throw runtime error;
+            std::cout << "RUNTIME ERROR: line " << line << std::endl;
+            exited = true;
+            exit;
+            return;
         }
     }
 
 
-    static Memory readMem(std::string location) {
+    static Memory readMem(std::string location, int line) {
         if (isNotInMemory(location)) {
-            // TODO(LandonDeam) throw runtime error;
+            std::cout << "RUNTIME ERROR: line " << line << std::endl;
+            exited = true;
+            exit;
+            return Memory();
         }
         return mem[location];
     }
 
-    static int readInt(std::string location) {
+    static int readInt(std::string location, int line) {
         if (isNotInMemory(location)) {
-            // TODO(LandonDeam) throw runtime error;
+            std::cout << "RUNTIME ERROR: line " << line << std::endl;
+            exited = true;
+            exit;
             return 0;
         }
         if (mem[location].type == "INT") {
             return std::get<int>(mem[location].data);
         } else {
+            std::cout << "RUNTIME ERROR: line " << line << std::endl;
+            exited = true;
+            exit;
             return 0;
         }
     }
 
-    static std::string toString(std::string key) {
+    static std::string toString(std::string key, int line) {
         if (isNotInMemory(key)) {
-            // TODO(LandonDeam) throw runtime error;
+            std::cout << "RUNTIME ERROR: line " << line << std::endl;
+            exited = true;
+            exit;
+            return "";
         }
         if (mem[key].type == "STR") {
             return "\""+std::get<std::string>(mem[key].data)+"\"";
@@ -272,8 +336,8 @@ class Memory {
         return "";
     }
 
-    static void print(std::string key) {
-        std::cout << key << "=" << toString(key) << std::endl;
+    static void print(std::string key, int line) {
+        std::cout << key << "=" << toString(key, line) << std::endl;
     }
 
     static void initMem() {
@@ -297,6 +361,58 @@ class Memory {
 class Statement {
  public:
     std::vector<Token> tokens;
+
+    explicit Statement(std::vector<Token> t) {
+        this->tokens = t;
+    }
+
+    void execute() {
+        if (exited) {
+            return;
+        }
+        if (tokens.at(0).TokenType == "KEY") {
+            if (tokens.at(0).TokenValue == "PRINT") {
+                Memory::print(tokens.at(1).TokenValue, tokens.at(1).TokenLine);
+            } else if (tokens.at(0).TokenValue == "FOR") {
+                for (int j = 0;
+                    j < ((tokens.at(1).TokenType == "VAR") ?
+                        Memory::readInt(
+                            tokens.at(1).TokenValue,
+                            tokens.at(1).TokenLine) :
+                        std::stoi(tokens.at(1).TokenValue));
+                    j++) {
+                    std::vector<Statement> statements =
+                    parse(std::vector<Token>(tokens.begin()+2,
+                                             tokens.end()));
+                    for (int k = 0; k < statements.size(); k++) {
+                        statements.at(k).execute();
+                    }
+                }
+            }
+        } else if (tokens.at(0).TokenType == "VAR") {
+            if (tokens.at(2).TokenType == "VAR") {
+                Memory::assignMem(
+                    tokens.at(0).TokenValue,
+                    tokens.at(1).TokenValue,
+                    Memory::readMem(
+                        tokens.at(2).TokenValue,
+                        tokens.at(2).TokenLine),
+                    tokens.at(0).TokenLine);
+            } else {
+                std::variant<int, std::string> value;
+                if (tokens.at(2).TokenType == "STR") {
+                    value = tokens.at(2).TokenValue;
+                } else if (tokens.at(2).TokenType == "INT") {
+                    value = std::stoi(tokens.at(2).TokenValue);
+                }
+                Memory::assignMem(
+                    tokens.at(0).TokenValue,
+                    tokens.at(1).TokenValue,
+                    Memory(tokens.at(2).TokenType, value),
+                    tokens.at(0).TokenLine);
+            }
+        }
+    }
 
     static std::vector<Statement> parse(std::vector<Token> tokens) {
         std::vector<Statement> out = std::vector<Statement>();
@@ -340,49 +456,6 @@ class Statement {
             }
         }
         return out;
-    }
-
-    explicit Statement(std::vector<Token> t) {
-        this->tokens = t;
-    }
-
-    void execute() {
-        if (tokens.at(0).TokenType == "KEY") {
-            if (tokens.at(0).TokenValue == "PRINT") {
-                Memory::print(tokens.at(1).TokenValue);
-            } else if (tokens.at(0).TokenValue == "FOR") {
-                for (int j = 0;
-                    j < ((tokens.at(1).TokenType == "VAR") ?
-                        Memory::readInt(tokens.at(1).TokenValue) :
-                        std::stoi(tokens.at(1).TokenValue));
-                    j++) {
-                    std::vector<Statement> statements =
-                    parse(std::vector<Token>(tokens.begin()+2,
-                                             tokens.end()));
-                    for (int k = 0; k < statements.size(); k++) {
-                        statements.at(k).execute();
-                    }
-                }
-            }
-        } else if (tokens.at(0).TokenType == "VAR") {
-            if (tokens.at(2).TokenType == "VAR") {
-                Memory::assignMem(
-                    tokens.at(0).TokenValue,
-                    tokens.at(1).TokenValue,
-                    Memory::readMem(tokens.at(2).TokenValue));
-            } else {
-                std::variant<int, std::string> value;
-                if (tokens.at(2).TokenType == "STR") {
-                    value = tokens.at(2).TokenValue;
-                } else if (tokens.at(2).TokenType == "INT") {
-                    value = std::stoi(tokens.at(2).TokenValue);
-                }
-                Memory::assignMem(
-                    tokens.at(0).TokenValue,
-                    tokens.at(1).TokenValue,
-                    Memory(tokens.at(2).TokenType, value));
-            }
-        }
     }
 };
 
