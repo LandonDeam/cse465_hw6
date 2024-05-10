@@ -14,7 +14,7 @@
 
 std::string slurp(std::ifstream& in);
 template<typename T>
-static void addVec(std::vector<T>* dest, std::vector<T> src);
+static void addVec(std::vector<T>* dest, const std::vector<T> src);
 static bool exited;
 
 class Token {
@@ -26,41 +26,44 @@ class Token {
 
     Token() {}
 
-    Token(std::string Type, std::string Value, int Position, int Line) {
+    Token(const std::string Type,
+          const std::string Value,
+          const int Position,
+          const int Line) {
         this->TokenType = Type;
         this->TokenValue = Value;
         this->TokenPos = Position;
         this->TokenLine = Line;
     }
 
-    bool operator== (Token other) {
+    bool operator== (const Token other) {
         return this->TokenPos == other.TokenPos &&
                this->TokenLine == other.TokenLine &&
                this->TokenType.compare(other.TokenType) == 0 &&
                this->TokenValue.compare(other.TokenValue) == 0;
     }
 
-    bool operator!= (Token other) {
+    bool operator!= (const Token other) {
         return !(*this == other);
     }
 
-    bool operator> (Token other) {
+    bool operator> (const Token other) {
         return this->TokenPos > other.TokenPos;
     }
 
-    bool operator< (Token other) {
+    bool operator< (const Token other) {
         return this->TokenPos < other.TokenPos;
     }
 
-    bool operator>= (Token other) {
+    bool operator>= (const Token other) {
         return this->TokenPos >= other.TokenPos;
     }
 
-    bool operator<= (Token other) {
+    bool operator<= (const Token other) {
         return this->TokenPos <= other.TokenPos;
     }
 
-    static std::vector<Token> LexicalAnalysis(std::string str) {
+    static std::vector<Token> LexicalAnalysis(const std::string str) {
         std::vector<Token> tokens = std::vector<Token>();
         std::vector<Token> remove = std::vector<Token>();
         std::vector<std::future<std::vector<Token>>> futures =
@@ -126,14 +129,14 @@ class Token {
     }
 
  private:
-    static std::regex string_reg;
-    static std::regex integer;
-    static std::regex variable;
-    static std::regex assign;
-    static std::regex compare;
-    static std::regex end_statement;
+    static const std::regex string_reg;
+    static const std::regex integer;
+    static const std::regex variable;
+    static const std::regex assign;
+    static const std::regex compare;
+    static const std::regex end_statement;
 
-    bool isInVector(std::vector<Token> vec) {
+    bool isInVector(const std::vector<Token> vec) {
         for (Token token : vec) {
             if (this->TokenPos >= token.TokenPos &&
                 this->TokenPos+this->TokenValue.size()
@@ -146,9 +149,9 @@ class Token {
     }
 
     static std::vector<Token> getTokens(
-            std::string str,
-            std::regex ptrn,
-            Token (*func)(std::smatch, std::string)) {
+            const std::string str,
+            const std::regex ptrn,
+            Token (*func)(const std::smatch, const std::string)) {
         std::vector<Token> tokens = std::vector<Token>();
         std::smatch str_result;
 
@@ -160,50 +163,50 @@ class Token {
 
         return tokens;
     }
-    static bool isKeyWord(std::string s) {
+    static bool isKeyWord(const std::string s) {
         return s == "PRINT" ||
                s == "FOR" ||
                s == "ENDFOR";
     }
 
-    static Token stringString(std::smatch match, std::string str) {
+    static Token stringString(const std::smatch match, const std::string str) {
         return Token("STR",
                      match.str(1),
                      match.position(1),
                      getLine(match.position(1), str));
     }
-    static Token intString(std::smatch match, std::string str) {
+    static Token intString(const std::smatch match, const std::string str) {
         return Token("INT",
                      match.str(),
                      match.position(),
                      getLine(match.position(), str));
     }
-    static Token varString(std::smatch match, std::string str) {
+    static Token varString(const std::smatch match, const std::string str) {
         return Token(isKeyWord(match.str()) ? "KEY" : "VAR",
                      match.str(),
                      match.position(),
                      getLine(match.position(), str));
     }
-    static Token assignString(std::smatch match, std::string str) {
+    static Token assignString(const std::smatch match, const std::string str) {
         return Token("ASSIGN",
                      match.str(1),
                      match.position(1),
                      getLine(match.position(1), str));
     }
-    static Token cmpString(std::smatch match, std::string str) {
+    static Token cmpString(const std::smatch match, const std::string str) {
         return Token("CMP",
                      match.str(),
                      match.position(),
                      getLine(match.position(), str));
     }
-    static Token endString(std::smatch match, std::string str) {
+    static Token endString(const std::smatch match, const std::string str) {
         return Token("END",
                      ";",
                      match.position(),
                      getLine(match.position(), str));
     }
 
-    static int getLine(int pos, std::string str) {
+    static int getLine(const int pos, const std::string str) {
         if (str.size() <= pos) {
             return -1;
         }
@@ -245,7 +248,7 @@ class Token {
         }
     }
 
-    static void swap(std::vector<Token>& v, int x, int y) {
+    static void swap(std::vector<Token>& v, const int x, const int y) {
         Token temp = v[x];
         v[x] = v[y];
         v[y] = temp;
@@ -258,10 +261,10 @@ class Memory {
     std::variant<int, std::string> data;
 
     static void assignMem(
-        std::string location,
-        std::string type,
-        Memory data,
-        int line) {
+        const std::string location,
+        const std::string type,
+        const Memory data,
+        const int line) {
         if (type == "=") {
             mem[location] = data;
         } else if (type == "+=" ||
@@ -499,12 +502,12 @@ class Statement {
 
 std::unordered_map<std::string, Memory> Memory::mem;
 
-std::regex Token::string_reg("\"(.*?)\"");
-std::regex Token::integer("-?[0-9]+");
-std::regex Token::variable("[a-zA-Z_][a-zA-Z_0-9]*(?=\\s|)(?!\")");
-std::regex Token::assign("(?:[^<>!])([+\\-*/]?=)");
-std::regex Token::compare("[<>=!]=");
-std::regex Token::end_statement(";");
+const std::regex Token::string_reg("\"(.*?)\"");
+const std::regex Token::integer("-?[0-9]+");
+const std::regex Token::variable("[a-zA-Z_][a-zA-Z_0-9]*(?=\\s|)(?!\")");
+const std::regex Token::assign("(?:[^<>!])([+\\-*/]?=)");
+const std::regex Token::compare("[<>=!]=");
+const std::regex Token::end_statement(";");
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -524,7 +527,7 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    std::string str = slurp(file);
+    const std::string str = slurp(file);
     std::vector<Token> tokens = Token::LexicalAnalysis(str);
     Memory::initMem();
     std::vector<Statement> statements = Statement::parse(tokens);
@@ -542,7 +545,7 @@ std::string slurp(std::ifstream& in) {
 }
 
 template<typename T>
-static void addVec(std::vector<T>* dest, std::vector<T> src) {
+static void addVec(std::vector<T>* dest, const std::vector<T> src) {
     dest->insert(
         dest->end(),
         std::make_move_iterator(src.begin()),
